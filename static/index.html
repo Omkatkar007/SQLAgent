@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQLAgent - Natural Language Database Assistant</title>
+  <meta name="description" content="Convert natural language questions into MySQL queries and get results in structured JSON and interactive tables.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Navigation Header -->
+    <header class="app-header" id="app-header">
+      <div class="header-left">
+        <div class="brand-logo" id="brand-logo">
+          <div class="logo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <span class="logo-title">SQLAgent</span>
+            <span class="logo-badge">Ollama + MySQL</span>
+          </div>
+        </div>
+
+        <div class="status-group" id="status-group">
+          <div class="status-pill" id="db-status-pill">
+            <span class="status-dot online" id="db-status-dot"></span>
+            <span class="status-label" id="db-status-text">Connecting...</span>
+          </div>
+          <div class="status-pill" id="ollama-status-pill">
+            <span class="status-dot online" id="ollama-status-dot"></span>
+            <span class="status-label" id="ollama-status-text">Ollama</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="control-item">
+          <label for="model-select" class="control-label">Model:</label>
+          <select id="model-select" class="control-select" aria-label="Select LLM Model">
+            <option value="llama3.2:1b">llama3.2:1b</option>
+            <option value="llama3:latest">llama3:latest</option>
+          </select>
+        </div>
+
+        <div class="control-item">
+          <label for="limit-select" class="control-label">Max Rows:</label>
+          <select id="limit-select" class="control-select" aria-label="Select row limit">
+            <option value="10">10 rows</option>
+            <option value="25">25 rows</option>
+            <option value="50">50 rows</option>
+            <option value="100" selected>100 rows</option>
+          </select>
+        </div>
+
+        <button id="clear-btn" class="icon-button" title="Clear conversation history" aria-label="Clear chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Clear</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="main-container" id="main-container">
+      <!-- Left Sidebar: Schema Explorer & Quick Prompts -->
+      <aside class="sidebar" id="sidebar">
+        <!-- Quick Prompts Section -->
+        <div class="sidebar-section" id="quick-prompts-section">
+          <div class="section-header">
+            <span class="section-title">Quick Prompts</span>
+          </div>
+          <div class="chips-container" id="chips-container">
+            <button class="prompt-chip" data-prompt="How many customers are in the database?">
+              📊 Total Customers Count
+            </button>
+            <button class="prompt-chip" data-prompt="Show 5 customers with their first name, last name, email, and kyc_status">
+              👥 Top 5 Customers
+            </button>
+            <button class="prompt-chip" data-prompt="What account types exist in the system?">
+              🏦 Account Types
+            </button>
+            <button class="prompt-chip" data-prompt="Show 5 loans with loan number, status, and outstanding amount">
+              💳 Active Loans
+            </button>
+            <button class="prompt-chip" data-prompt="Show 5 branches with branch name and code">
+              📍 Bank Branches
+            </button>
+          </div>
+        </div>
+
+        <!-- Schema Explorer Section -->
+        <div class="sidebar-section schema-section" id="schema-section">
+          <div class="section-header">
+            <span class="section-title">Schema Explorer</span>
+            <span class="badge" id="table-count-badge">0 tables</span>
+          </div>
+          <div class="search-box">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="schema-search" placeholder="Filter tables..." autocomplete="off">
+          </div>
+          <div class="schema-list" id="schema-list">
+            <div class="loading-placeholder">Loading tables...</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Central Chat & Output Area -->
+      <main class="chat-workspace" id="chat-workspace">
+        <div class="chat-messages" id="chat-messages">
+          <!-- Welcome Hero Banner -->
+          <div class="welcome-card" id="welcome-card">
+            <div class="welcome-badge">AI Database Engine</div>
+            <h1 class="welcome-title">Ask your database anything in plain English.</h1>
+            <p class="welcome-desc">
+              SQLAgent converts your natural language questions into safe, optimized MySQL queries using 
+              local Ollama LLMs and delivers results in real-time JSON and interactive tables.
+            </p>
+            <div class="features-row">
+              <div class="feature-item">
+                <span class="feature-icon">⚡</span>
+                <span class="feature-text">Sub-second local execution</span>
+              </div>
+              <div class="feature-item">
+                <span class="feature-icon">🛡️</span>
+                <span class="feature-text">Read-only safety guardrails</span>
+              </div>
+              <div class="feature-item">
+                <span class="feature-icon">🔄</span>
+                <span class="feature-text">Self-healing query repairs</span>
+              </div>
+              <div class="feature-item">
+                <span class="feature-icon">📊</span>
+                <span class="feature-text">Interactive Table & JSON views</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fixed Input Container -->
+        <div class="input-wrapper" id="input-wrapper">
+          <form id="query-form" class="query-form">
+            <div class="input-box-container">
+              <textarea 
+                id="query-input" 
+                class="query-textarea" 
+                placeholder="Ask a question about your database (e.g. 'Show top 5 accounts with customer details')..." 
+                rows="1" 
+                required
+              ></textarea>
+              <button type="submit" id="submit-btn" class="submit-button" aria-label="Execute query">
+                <span class="btn-text">Run Query</span>
+                <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                <div class="spinner" id="btn-spinner" style="display: none;"></div>
+              </button>
+            </div>
+            <div class="input-hint">
+              <span>Press <kbd>Enter ↵</kbd> to execute, <kbd>Shift + Enter</kbd> for new line</span>
+              <span id="timing-indicator"></span>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Schema Detail Modal -->
+  <div class="modal-backdrop" id="modal-backdrop" style="display: none;">
+    <div class="modal-card" id="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-table-title">Table Schema</h3>
+        <button id="modal-close-btn" class="icon-button" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <pre><code id="modal-schema-code">Loading...</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
